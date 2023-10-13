@@ -1,7 +1,7 @@
 {
 	"id": "pastejpg-klaudyu",
 	"name": "paste to jpeg",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "this hooks on clipboard. made with the help of chatgpt",
 	"author": "klaudyu",
