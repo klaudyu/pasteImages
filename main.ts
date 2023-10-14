@@ -19,17 +19,24 @@ const DEFAULT_SETTINGS: pasteToJpegSettings = {
 
 export default class pasteToJpeg extends Plugin {
     settings: pasteToJpegSettings;
+	boundHandlePaste: any;
+  
  
     async onload() {
         await this.loadSettings();
-        document.addEventListener("paste", this.handlePaste.bind(this), true);    
+		this.boundHandlePaste = this.handlePaste.bind(this);
+		document.addEventListener("paste", this.boundHandlePaste, true);
+
+        //document.addEventListener("paste", this.handlePaste.bind(this), true);    
         
         // This adds a settings tab so the user can configure various aspects of the plugin
         this.addSettingTab(new SampleSettingTab(this.app, this));
     }
 
     onunload() {
-        document.removeEventListener('paste', this.handlePaste.bind(this),true);
+        //document.removeEventListener('paste', this.handlePaste.bind(this),true);
+		document.removeEventListener('paste', this.boundHandlePaste, true);
+
         
     }
 
@@ -46,8 +53,21 @@ export default class pasteToJpeg extends Plugin {
         pngFound = true;
         e.stopPropagation();
         e.preventDefault();
+		this.saveitem2Jpeg(item)
 
-        const blob = item.getAsFile();
+      }
+    } 
+
+    // If no PNG is found, let the event pass through for normal handling
+    if (!pngFound) {
+      return true;
+    }
+  }
+
+
+
+    saveitem2Jpeg(item):void{
+	    const blob = item.getAsFile();
         const reader = new FileReader();
         console.log(`Original blob size: ${blob.size}`);  
 
@@ -143,18 +163,7 @@ export default class pasteToJpeg extends Plugin {
           };
         };
         reader.readAsDataURL(blob);
-      }
-    }
-
-    // If no PNG is found, let the event pass through for normal handling
-    if (!pngFound) {
-      return true;
-    }
-  }
-
-
-
-
+	}
 
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -233,7 +242,7 @@ class SampleSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.imgPath)
                 .onChange(async (value) => {
                     this.plugin.settings.imgPath = value;
-                    await this.plugin.saveSettings();
+                    await this.plugin.saveSettings(); 
                 }));
     }
 }
