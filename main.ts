@@ -40,18 +40,21 @@ export default class pasteToJpeg extends Plugin {
 	async handlePaste(e) {
 		const clipboardData = e.clipboardData || window.clipboardData;
 		const items = clipboardData.items || [];
+		const editor = this.app.workspace.activeLeaf.view.editor;
 
-		for (const index in items) {
-			const item = items[index];
-			console.log(`${item.kind}, ${item.type}`);
-			if (
-				item.kind === "file" &&
-				(item.type === "image/png" || item.type === "image/jpeg")
-			) {
-				e.stopPropagation();
-				e.preventDefault();
-				this.saveitem2Format(item, this.settings.imgFormat);
-				//this.saveitem2Format(item,'image/jpeg');
+		if (editor) {
+			for (const index in items) {
+				const item = items[index];
+				console.log(`${item.kind}, ${item.type}`);
+				if (
+					item.kind === "file" &&
+					(item.type === "image/png" || item.type === "image/jpeg")
+				) {
+					e.stopPropagation();
+					e.preventDefault();
+					this.saveitem2Format(item, this.settings.imgFormat);
+					//this.saveitem2Format(item,'image/jpeg');
+				}
 			}
 		}
 	}
@@ -103,8 +106,13 @@ export default class pasteToJpeg extends Plugin {
 							this.app.workspace.activeLeaf.view.editor;
 
 						// Insert Markdown link at cursor position
-
-						editor.replaceSelection(markdownLink);
+						if (editor) {
+							editor.replaceSelection(markdownLink);
+						} else {
+							console.log(
+								"No active text editor. Can't insert Markdown link.",
+							);
+						}
 					},
 					format,
 					parseFloat(this.settings.compression),
