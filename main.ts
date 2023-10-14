@@ -9,6 +9,7 @@ interface pasteToJpegSettings {
 	imgPrefix: string;
 	imgPath: string;
 	imgFormat: string;
+	convertInEditorOnly: boolean;
 }
 
 const DEFAULT_SETTINGS: pasteToJpegSettings = {
@@ -17,6 +18,7 @@ const DEFAULT_SETTINGS: pasteToJpegSettings = {
 	imgPrefix: "",
 	imgFormat: "image/jpeg", // or 'image/webp'
 	imgPath: "",
+    convertInEditorOnly:true,
 };
 
 export default class pasteToJpeg extends Plugin {
@@ -40,21 +42,21 @@ export default class pasteToJpeg extends Plugin {
 	async handlePaste(e) {
 		const clipboardData = e.clipboardData || window.clipboardData;
 		const items = clipboardData.items || [];
-		const editor = this.app.workspace.activeLeaf.view.editor;
 
-		if (editor) {
-			for (const index in items) {
-				const item = items[index];
-				console.log(`${item.kind}, ${item.type}`);
-				if (
-					item.kind === "file" &&
-					(item.type === "image/png" || item.type === "image/jpeg")
-				) {
-					e.stopPropagation();
-					e.preventDefault();
-					this.saveitem2Format(item, this.settings.imgFormat);
-					//this.saveitem2Format(item,'image/jpeg');
-				}
+		if (this.settings.convertInEditorOnly && !this.isInEditor()) {
+			return;
+		}
+		for (const index in items) {
+			const item = items[index];
+			console.log(`${item.kind}, ${item.type}`);
+			if (
+				item.kind === "file" &&
+				(item.type === "image/png" || item.type === "image/jpeg")
+			) {
+				e.stopPropagation();
+				e.preventDefault();
+				this.saveitem2Format(item, this.settings.imgFormat);
+				//this.saveitem2Format(item,'image/jpeg');
 			}
 		}
 	}
@@ -109,6 +111,11 @@ export default class pasteToJpeg extends Plugin {
 						if (editor) {
 							editor.replaceSelection(markdownLink);
 						} else {
+							new Notice(
+								"Image converted and saved but not pasted because no active editor",
+							);
+							new Notice(`'Full path ${filename}'`, 10000);
+
 							console.log(
 								"No active text editor. Can't insert Markdown link.",
 							);
@@ -155,7 +162,7 @@ export default class pasteToJpeg extends Plugin {
 		const now = new Date();
 		const extension = format.split("/")[1];
 
-		const formattedDateTime = `${now.getFullYear()}-${String(
+		/*const formattedDateTime = `${now.getFullYear()}-${String(
 			now.getMonth() + 1,
 		).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(
 			now.getHours(),
@@ -164,7 +171,14 @@ export default class pasteToJpeg extends Plugin {
 			"0",
 		)}-${String(now.getSeconds()).padStart(2, "0")}-${String(
 			now.getMilliseconds(),
-		).padStart(3, "0")}`;
+		).padStart(3, "0")}`;*/
+
+		const formattedDateTime = `${now.getFullYear()}${String(
+			now.getMonth() + 1,
+		).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(
+			now.getHours(),
+		).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+
 		const rand = Math.floor(Math.random() * 1000);
 
 		// Get the name of the currently active file
@@ -180,7 +194,7 @@ export default class pasteToJpeg extends Plugin {
 		const originalName = activeFile ? activeFile.basename : "Image";
 
 		// Generate a unique filename
-		const filename = `${folderPath}/${this.settings.imgPrefix}${originalName}-${formattedDateTime}-rnd${rand}.${extension}`;
+		const filename = `${folderPath}/${this.settings.imgPrefix}${originalName}-${formattedDateTime}-${rand}.${extension}`;
 		const parts = filename.split("/");
 		const basename = parts.pop();
 
@@ -299,6 +313,17 @@ class SampleSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.imgFormat)
 					.onChange(async (value) => {
 						this.plugin.settings.imgFormat = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+		new Setting(containerEl)
+			.setName("Convert in Editor Only")
+			.setDesc("Enable this to only convert images in the editor.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.convertInEditorOnly)
+					.onChange(async (value) => {
+						this.plugin.settings.convertInEditorOnly = value;
 						await this.plugin.saveSettings();
 					}),
 			);
