@@ -1,7 +1,93 @@
-import { App, Plugin, PluginSettingTab, Setting /*Modal*/ } from "obsidian";
+import { App, Modal, Plugin, PluginSettingTab, Setting } from "obsidian";
+
+const imageFormats = {
+	"image/jpeg": "JPEG",
+	"image/webp": "WebP",
+	// Add more as needed
+};
+
 //import path from "path";
 import path from "path";
-// Remember to rename these classes and interfaces!
+
+class CustomModal extends Modal {
+	plugin: pasteToJpeg; // add this line
+
+	constructor(app, plugin) {
+		super(app);
+		this.wasCancelled = false;
+		this.plugin = plugin;
+	}
+
+	onOpen() {
+		let { contentEl } = this;
+
+		// Create divs to group related elements
+		let resizeDiv = contentEl.createEl("div", { cls: "input-group" });
+		let formatDiv = contentEl.createEl("div", { cls: "input-group" });
+		let compressDiv = contentEl.createEl("div", { cls: "input-group" });
+		let buttonDiv = contentEl.createEl("div", { cls: "button-group" });
+
+		// Create and append labels
+		resizeDiv.createEl("span", { text: "clip image bigger than: " });
+		formatDiv.createEl("span", { text: "Output Format: " });
+		compressDiv.createEl("span", { text: "Compression:" });
+
+		// Create the inputs
+		this.resizeInput = resizeDiv.createEl("input", {
+			type: "text",
+			value: this.plugin.settings.maxdim,
+		});
+		this.compressInput = compressDiv.createEl("input", {
+			type: "text",
+			value: this.plugin.settings.compression,
+		});
+
+		this.formatSelect = formatDiv.createEl("select");
+		for (const [value, text] of Object.entries(imageFormats)) {
+			let option = this.formatSelect.createEl("option", { value, text });
+			// Setting the default value based on plugin.settings.format
+			if (this.plugin.settings.imgFormat === value) {
+				option.selected = true;
+			}
+		}
+
+		console.log(`"format select is"${this.formatSelect.value}`);
+
+		// Create the buttons
+		let confirmButton = buttonDiv.createEl("button", {
+			text: "OK",
+			type: "submit",
+		});
+		let cancelButton = buttonDiv.createEl("button", { text: "Cancel" });
+
+		confirmButton.addEventListener("click", () => {
+			this.wasCancelled = false; // Set to false when OK is clicked
+			this.close();
+		});
+
+		cancelButton.addEventListener("click", () => {
+			this.wasCancelled = true;
+			this.close();
+		});
+	}
+}
+
+async function getUserSettings(plugin) {
+	console.log(`"the plugin in getUserSettings is ${plugin}`);
+	return new Promise((resolve, reject) => {
+		let myModal = new CustomModal(app, plugin);
+		myModal.onClose = () => {
+			// Get the values from the class properties instead of calling onClose again.
+			resolve({
+				format: myModal.formatSelect.value,
+				maxdim: myModal.resizeInput.value,
+				cancelled: myModal.wasCancelled,
+				compression: myModal.compressInput.value,
+			});
+		};
+		myModal.open();
+	});
+}
 
 interface pasteToJpegSettings {
 	compression: string;
@@ -10,6 +96,7 @@ interface pasteToJpegSettings {
 	imgPath: string;
 	imgFormat: string;
 	convertInEditorOnly: boolean;
+    askUser:boolean;
 }
 
 const DEFAULT_SETTINGS: pasteToJpegSettings = {
@@ -18,7 +105,8 @@ const DEFAULT_SETTINGS: pasteToJpegSettings = {
 	imgPrefix: "",
 	imgFormat: "image/jpeg", // or 'image/webp'
 	imgPath: "",
-    convertInEditorOnly:true,
+	convertInEditorOnly: true,
+    askUser:false
 };
 
 export default class pasteToJpeg extends Plugin {
@@ -46,6 +134,7 @@ export default class pasteToJpeg extends Plugin {
 		if (this.settings.convertInEditorOnly && !this.isInEditor()) {
 			return;
 		}
+
 		for (const index in items) {
 			const item = items[index];
 			console.log(`${item.kind}, ${item.type}`);
@@ -55,13 +144,16 @@ export default class pasteToJpeg extends Plugin {
 			) {
 				e.stopPropagation();
 				e.preventDefault();
-				this.saveitem2Format(item, this.settings.imgFormat);
+				//const userSettings = await getUserSettings();
+				//console.log(`${userSettings}`);
+
+				this.saveitem2Format(item);
 				//this.saveitem2Format(item,'image/jpeg');
 			}
 		}
 	}
 
-	saveitem2Format(item, format): void {
+	saveitem2Format(item): void {
 		const blob = item.getAsFile();
 		const reader = new FileReader();
 
@@ -74,10 +166,33 @@ export default class pasteToJpeg extends Plugin {
 			img.onload = async () => {
 				const canvas = document.createElement("canvas");
 				const ctx = canvas.getContext("2d");
+                let maxdim=this.settings.maxdim;
+                let compression=this.settings.compression;
+                let format=this.settings.imgFormat;
+
+                if (this.settings.askUser){
+                    try {
+                        const userSettings = await getUserSettings(this);
+                        console.log(`'user selected:'${userSettings}`);
+                        /*format,maxdim,cancelled,compression*/
+                        if (!userSettings.cancelled){
+                            compression=userSettings.compression;
+                            maxdim=userSettings.maxdim;
+                            format=userSettings.format;
+                            if(this.settings.saveaskUser){
+                                this.settings.maxdim=maxdim;
+                                this.settings.compression=compression;
+                                this.settings.imgFormat=format;
+                            }
+                        }
+                    } catch (error) {
+                        console.error("Failed to get user settings:", error);
+                    }
+                }
 
 				const [newWidth, newHeight] = this.getDims(
 					img,
-					this.settings.maxdim,
+					maxdim,
 				);
 
 				canvas.width = newWidth;
@@ -95,6 +210,7 @@ export default class pasteToJpeg extends Plugin {
 
 						const arrayBuffer = await newBlob.arrayBuffer();
 						const uint8Array = new Uint8Array(arrayBuffer);
+
 						await this.app.vault.adapter.write(
 							filename,
 							uint8Array,
@@ -122,7 +238,7 @@ export default class pasteToJpeg extends Plugin {
 						}
 					},
 					format,
-					parseFloat(this.settings.compression),
+					parseFloat(compression),
 				);
 
 				//console.log(`'compression is ',${this.settings.compression}'`);
@@ -162,16 +278,6 @@ export default class pasteToJpeg extends Plugin {
 		const now = new Date();
 		const extension = format.split("/")[1];
 
-		/*const formattedDateTime = `${now.getFullYear()}-${String(
-			now.getMonth() + 1,
-		).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(
-			now.getHours(),
-		).padStart(2, "0")}-${String(now.getMinutes()).padStart(
-			2,
-			"0",
-		)}-${String(now.getSeconds()).padStart(2, "0")}-${String(
-			now.getMilliseconds(),
-		).padStart(3, "0")}`;*/
 
 		const formattedDateTime = `${now.getFullYear()}${String(
 			now.getMonth() + 1,
@@ -221,22 +327,6 @@ export default class pasteToJpeg extends Plugin {
 	}
 }
 
-/*
-class SampleModal extends Modal {
-    constructor(app: App) {
-        super(app);
-    }
-
-    onOpen() {
-        const {contentEl} = this;
-        contentEl.setText('Woah!');
-    }
-
-    onClose() {
-        const {contentEl} = this;
-        contentEl.empty();
-    }
-}*/
 
 class SampleSettingTab extends PluginSettingTab {
 	plugin: pasteToJpeg;
@@ -270,7 +360,7 @@ class SampleSettingTab extends PluginSettingTab {
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder("100-10000")
+					.setPlaceholder("")
 					.setValue(this.plugin.settings.maxdim)
 					.onChange(async (value) => {
 						this.plugin.settings.maxdim = value;
@@ -303,19 +393,21 @@ class SampleSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
 		new Setting(containerEl)
 			.setName("Image Format")
 			.setDesc("Choose between JPEG and WebP formats.")
-			.addDropdown((dropdown) =>
+			.addDropdown((dropdown) => {
+				for (const [value, text] of Object.entries(imageFormats)) {
+					dropdown.addOption(value, text);
+				}
 				dropdown
-					.addOption("image/jpeg", "JPEG")
-					.addOption("image/webp", "WebP")
 					.setValue(this.plugin.settings.imgFormat)
 					.onChange(async (value) => {
 						this.plugin.settings.imgFormat = value;
 						await this.plugin.saveSettings();
-					}),
-			);
+					});
+			});
 		new Setting(containerEl)
 			.setName("Convert in Editor Only")
 			.setDesc("Enable this to only convert images in the editor.")
@@ -324,6 +416,28 @@ class SampleSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.convertInEditorOnly)
 					.onChange(async (value) => {
 						this.plugin.settings.convertInEditorOnly = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+        new Setting(containerEl)
+			.setName("Ask user every time")
+			.setDesc("Enable this to ask the parameters each time as a pop-up.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.askUser)
+					.onChange(async (value) => {
+						this.plugin.settings.askUser = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+        new Setting(containerEl)
+			.setName("Save parameters")
+			.setDesc("Enable this to save the values the user selects in the pop-up")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.saveaskUser)
+					.onChange(async (value) => {
+						this.plugin.settings.saveaskUser = value;
 						await this.plugin.saveSettings();
 					}),
 			);
