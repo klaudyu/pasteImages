@@ -1,4 +1,4 @@
-# obsidian paste to jpeg
+# obsidian paste Images
 Inspired by https://github.com/musug/obsidian-paste-png-to-jpeg
 The problem with that plugin was that if using syncronization via syncthing or dropbox, 
 or any other sync mechanism, that plugin was converting the png files to jpeg.
