@@ -8,14 +8,14 @@ The plugin mentioned before was just monitoring all the files, and if was detect
 a new png, was converting it to jpeg.
 
 # Features
-- Paste image and convert it to jpeg
+- Paste image and convert it to jpeg or webp
 - Posibility to set a default folder, and a default prefix, which can contain
 a path. That way it creates a subfolder in the current folder
-- posibility to set the quality of the jpg conversion
+- posibility to set the quality of the conversion
 - posibility to set the a maximum image dimension, so if the image is bigger
 than that it is resized.
 - paste multiple images at once
 
 # ToDo
-- add option to ask the user if it wants to convert
+
  
