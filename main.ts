@@ -370,11 +370,19 @@ export default class pasteToJpeg extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			await this.loadData(),
-		);
+		const loadedData = await this.loadData();
+		
+		if (loadedData === null || loadedData === undefined) {
+			// Create data.json with default values if it doesn't exist
+			await this.saveData(DEFAULT_SETTINGS);
+			this.settings = { ...DEFAULT_SETTINGS };
+		} else {
+			this.settings = Object.assign(
+				{},
+				DEFAULT_SETTINGS,
+				loadedData,
+			);
+		}
 	}
 
 	async saveSettings() {

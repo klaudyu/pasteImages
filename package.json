@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"dist": "npm run build && node -e \"const fs = require('fs'); const path = require('path'); const distDir = 'dist/pasteImages'; fs.rmSync('dist', { recursive: true, force: true }); fs.mkdirSync(distDir, { recursive: true }); ['manifest.json', 'main.js', 'styles.css'].forEach(file => fs.copyFileSync(file, path.join(distDir, file))); console.log('Distribution folder created at dist/pasteImages');\"",
+		"dist": "npm run build && node -e \"const fs = require('fs'); const path = require('path'); const distDir = 'dist/pasteImages'; fs.rmSync('dist', { recursive: true, force: true }); fs.mkdirSync(distDir, { recursive: true }); ['manifest.json', 'main.js', 'styles.css'].forEach(file => fs.copyFileSync(file, path.join(distDir, file))); if (fs.existsSync('data.json')) fs.copyFileSync('data.json', path.join(distDir, 'data.json')); console.log('Distribution folder created at dist/pasteImages');\"",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [],
