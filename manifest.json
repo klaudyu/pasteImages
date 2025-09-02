@@ -1,7 +1,7 @@
 {
 	"id": "pasteImages",
 	"name": "paste images",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"minAppVersion": "0.15.0",
 	"description": "this hooks on clipboard. made with the help of chatgpt",
 	"author": "klaudyu",
