@@ -5,7 +5,7 @@ import {
 	PluginSettingTab,
 	Setting,
 	Notice,
-	TFile,
+	MarkdownView,
 } from "obsidian";
 import * as path from "path";
 
@@ -17,7 +17,7 @@ const imageFormats = {
 
 class CustomModal extends Modal {
 	plugin: pasteToJpeg;
-	wasCancelled: boolean = false;
+	wasCancelled = false;
 	resizeInput: HTMLInputElement;
 	compressInput: HTMLInputElement;
 	formatSelect: HTMLSelectElement;
@@ -29,13 +29,13 @@ class CustomModal extends Modal {
 	}
 
 	onOpen() {
-		let { contentEl } = this;
+		const { contentEl } = this;
 
 		// Create divs to group related elements
-		let resizeDiv = contentEl.createEl("div", { cls: "input-group" });
-		let formatDiv = contentEl.createEl("div", { cls: "input-group" });
-		let compressDiv = contentEl.createEl("div", { cls: "input-group" });
-		let buttonDiv = contentEl.createEl("div", { cls: "button-group" });
+		const resizeDiv = contentEl.createEl("div", { cls: "input-group" });
+		const formatDiv = contentEl.createEl("div", { cls: "input-group" });
+		const compressDiv = contentEl.createEl("div", { cls: "input-group" });
+		const buttonDiv = contentEl.createEl("div", { cls: "button-group" });
 
 		// Create and append labels
 		resizeDiv.createEl("span", { text: "clip image bigger than: " });
@@ -54,7 +54,7 @@ class CustomModal extends Modal {
 
 		this.formatSelect = formatDiv.createEl("select");
 		for (const [value, text] of Object.entries(imageFormats)) {
-			let option = this.formatSelect.createEl("option", { value, text });
+			const option = this.formatSelect.createEl("option", { value, text });
 			// Setting the default value based on plugin.settings.format
 			if (this.plugin.settings.imgFormat === value) {
 				option.selected = true;
@@ -64,11 +64,11 @@ class CustomModal extends Modal {
 		console.log(`"format select is"${this.formatSelect.value}`);
 
 		// Create the buttons
-		let confirmButton = buttonDiv.createEl("button", {
+		const confirmButton = buttonDiv.createEl("button", {
 			text: "OK",
 			type: "submit",
 		});
-		let cancelButton = buttonDiv.createEl("button", { text: "Cancel" });
+		const cancelButton = buttonDiv.createEl("button", { text: "Cancel" });
 
 		confirmButton.addEventListener("click", () => {
 			this.wasCancelled = false; // Set to false when OK is clicked
@@ -92,7 +92,7 @@ interface UserSettings {
 async function getUserSettings(plugin: pasteToJpeg): Promise<UserSettings> {
 	console.log(`"the plugin in getUserSettings is ${plugin}`);
 	return new Promise((resolve, reject) => {
-		let myModal = new CustomModal(plugin.app, plugin);
+		const myModal = new CustomModal(plugin.app, plugin);
 		myModal.onClose = () => {
 			// Get the values from the class properties instead of calling onClose again.
 			resolve({
@@ -272,7 +272,7 @@ export default class pasteToJpeg extends Plugin {
 						const activeLeaf = this.app.workspace.activeLeaf;
 						const editor =
 							activeLeaf?.view.getViewType() === "markdown"
-								? (activeLeaf.view as any).editor
+								? (activeLeaf.view as MarkdownView).editor
 								: null;
 
 						// Insert Markdown link at cursor position
