@@ -1,4 +1,13 @@
-import { App, Modal, Plugin, PluginSettingTab, Setting } from "obsidian";
+import {
+	App,
+	Modal,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	Notice,
+	TFile,
+} from "obsidian";
+import * as path from "path";
 
 const imageFormats = {
 	"image/jpeg": "JPEG",
@@ -6,13 +15,14 @@ const imageFormats = {
 	// Add more as needed
 };
 
-//import path from "path";
-import path from "path";
-
 class CustomModal extends Modal {
-	plugin: pasteToJpeg; // add this line
+	plugin: pasteToJpeg;
+	wasCancelled: boolean = false;
+	resizeInput: HTMLInputElement;
+	compressInput: HTMLInputElement;
+	formatSelect: HTMLSelectElement;
 
-	constructor(app, plugin) {
+	constructor(app: App, plugin: pasteToJpeg) {
 		super(app);
 		this.wasCancelled = false;
 		this.plugin = plugin;
@@ -72,10 +82,17 @@ class CustomModal extends Modal {
 	}
 }
 
-async function getUserSettings(plugin) {
+interface UserSettings {
+	format: string;
+	maxdim: string;
+	cancelled: boolean;
+	compression: string;
+}
+
+async function getUserSettings(plugin: pasteToJpeg): Promise<UserSettings> {
 	console.log(`"the plugin in getUserSettings is ${plugin}`);
 	return new Promise((resolve, reject) => {
-		let myModal = new CustomModal(app, plugin);
+		let myModal = new CustomModal(plugin.app, plugin);
 		myModal.onClose = () => {
 			// Get the values from the class properties instead of calling onClose again.
 			resolve({
@@ -96,26 +113,28 @@ interface pasteToJpegSettings {
 	imgPath: string;
 	imgFormat: string;
 	convertInEditorOnly: boolean;
-    askUser:boolean;
+	askUser: boolean;
+	saveaskUser: boolean;
 }
 
 const DEFAULT_SETTINGS: pasteToJpegSettings = {
-	compression: 0.95,
-	maxdim: 0,
+	compression: "0.95",
+	maxdim: "0",
 	imgPrefix: "",
 	imgFormat: "image/jpeg", // or 'image/webp'
 	imgPath: "",
 	convertInEditorOnly: true,
-    askUser:false
+	askUser: false,
+	saveaskUser: false,
 };
 
 export default class pasteToJpeg extends Plugin {
 	settings: pasteToJpegSettings;
-	boundHandlePaste: any;
+	boundHandlePaste: (e: ClipboardEvent) => void;
 
 	async onload() {
 		await this.loadSettings();
-		this.boundHandlePaste = this.handlePaste.bind(this);
+		this.boundHandlePaste = (e: ClipboardEvent) => this.handlePaste(e);
 		document.addEventListener("paste", this.boundHandlePaste, true);
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
@@ -127,21 +146,39 @@ export default class pasteToJpeg extends Plugin {
 		document.removeEventListener("paste", this.boundHandlePaste, true);
 	}
 
-	async handlePaste(e) {
-		const clipboardData = e.clipboardData || window.clipboardData;
+	isInEditor(): boolean {
+		const activeLeaf = this.app.workspace.activeLeaf;
+		if (!activeLeaf) return false;
+
+		// Check if we're in a markdown view
+		return activeLeaf.view.getViewType() === "markdown";
+	}
+
+	async handlePaste(e: ClipboardEvent) {
+		console.log("HandlePaste called, this:", this);
+		console.log("isInEditor method exists:", typeof this.isInEditor);
+
+		const clipboardData = e.clipboardData;
+		if (!clipboardData) return;
+
 		const items = clipboardData.items || [];
 
 		if (this.settings.convertInEditorOnly && !this.isInEditor()) {
+			console.log("Not in editor, skipping conversion");
 			return;
 		}
+
+		console.log("Processing paste items:", items.length);
 
 		for (const index in items) {
 			const item = items[index];
 			console.log(`${item.kind}, ${item.type}`);
 			if (
 				item.kind === "file" &&
-				(item.type === "image/png" || item.type === "image/jpeg")
+				item.type?.startsWith("image/") &&
+				item.type !== "image/svg+xml"
 			) {
+				console.log("Found image to convert");
 				e.stopPropagation();
 				e.preventDefault();
 				//const userSettings = await getUserSettings();
@@ -153,46 +190,56 @@ export default class pasteToJpeg extends Plugin {
 		}
 	}
 
-	saveitem2Format(item): void {
+	saveitem2Format(item: DataTransferItem): void {
 		const blob = item.getAsFile();
+		if (!blob) return;
+
 		const reader = new FileReader();
 
 		//console.log(`Original blob size: ${blob.size}`);
 
 		reader.onload = async (event) => {
+			if (!event.target?.result) return;
+
 			const img = new Image();
-			img.src = event.target.result;
+			img.src = event.target.result as string;
 
 			img.onload = async () => {
 				const canvas = document.createElement("canvas");
 				const ctx = canvas.getContext("2d");
-                let maxdim=this.settings.maxdim;
-                let compression=this.settings.compression;
-                let format=this.settings.imgFormat;
+				if (!ctx) return;
 
-                if (this.settings.askUser){
-                    try {
-                        const userSettings = await getUserSettings(this);
-                        console.log(`'user selected:'${userSettings}`);
-                        /*format,maxdim,cancelled,compression*/
-                        if (!userSettings.cancelled){
-                            compression=userSettings.compression;
-                            maxdim=userSettings.maxdim;
-                            format=userSettings.format;
-                            if(this.settings.saveaskUser){
-                                this.settings.maxdim=maxdim;
-                                this.settings.compression=compression;
-                                this.settings.imgFormat=format;
-                            }
-                        }
-                    } catch (error) {
-                        console.error("Failed to get user settings:", error);
-                    }
-                }
+				let maxdim = this.settings.maxdim;
+				let compression = this.settings.compression;
+				let format = this.settings.imgFormat;
+
+				if (this.settings.askUser) {
+					try {
+						const userSettings = await getUserSettings(this);
+						console.log(`'user selected:'${userSettings}`);
+						/*format,maxdim,cancelled,compression*/
+						if (!userSettings.cancelled) {
+							compression = userSettings.compression;
+							maxdim = userSettings.maxdim;
+							format = userSettings.format;
+							if (this.settings.saveaskUser) {
+								this.settings.maxdim = maxdim;
+								this.settings.compression = compression;
+								this.settings.imgFormat = format;
+								await this.saveSettings();
+							}
+						} else {
+							return; // User cancelled, don't process the image
+						}
+					} catch (error) {
+						console.error("Failed to get user settings:", error);
+						return;
+					}
+				}
 
 				const [newWidth, newHeight] = this.getDims(
 					img,
-					maxdim,
+					parseInt(maxdim),
 				);
 
 				canvas.width = newWidth;
@@ -201,6 +248,8 @@ export default class pasteToJpeg extends Plugin {
 
 				canvas.toBlob(
 					async (newBlob) => {
+						if (!newBlob) return;
+
 						//console.log(`New blob size: ${newBlob.size}`);
 
 						const [filename, basename] =
@@ -211,7 +260,7 @@ export default class pasteToJpeg extends Plugin {
 						const arrayBuffer = await newBlob.arrayBuffer();
 						const uint8Array = new Uint8Array(arrayBuffer);
 
-						await this.app.vault.adapter.write(
+						await this.app.vault.adapter.writeBinary(
 							filename,
 							uint8Array,
 						);
@@ -220,8 +269,11 @@ export default class pasteToJpeg extends Plugin {
 						const markdownLink = `![[${basename}]]`;
 
 						// Get the current editor instance
+						const activeLeaf = this.app.workspace.activeLeaf;
 						const editor =
-							this.app.workspace.activeLeaf.view.editor;
+							activeLeaf?.view.getViewType() === "markdown"
+								? (activeLeaf.view as any).editor
+								: null;
 
 						// Insert Markdown link at cursor position
 						if (editor) {
@@ -230,7 +282,7 @@ export default class pasteToJpeg extends Plugin {
 							new Notice(
 								"Image converted and saved but not pasted because no active editor",
 							);
-							new Notice(`'Full path ${filename}'`, 10000);
+							new Notice(`Full path: ${filename}`, 10000);
 
 							console.log(
 								"No active text editor. Can't insert Markdown link.",
@@ -248,11 +300,11 @@ export default class pasteToJpeg extends Plugin {
 		reader.readAsDataURL(blob);
 	}
 
-	getDims(img, maxDim) {
+	getDims(img: HTMLImageElement, maxDim: number): [number, number] {
 		const aspectRatio = img.width / img.height;
 		let newWidth, newHeight;
 
-		if (maxDim > 100) {
+		if (maxDim > 49) {
 			if (img.width > maxDim || img.height > maxDim) {
 				if (img.width > img.height) {
 					newWidth = maxDim;
@@ -273,11 +325,10 @@ export default class pasteToJpeg extends Plugin {
 		return [newWidth, newHeight];
 	}
 
-	async generateFilePath(format): Promise<string> {
+	async generateFilePath(format: string): Promise<[string, string]> {
 		// Get the current date-time and format it
 		const now = new Date();
 		const extension = format.split("/")[1];
-
 
 		const formattedDateTime = `${now.getFullYear()}${String(
 			now.getMonth() + 1,
@@ -289,7 +340,8 @@ export default class pasteToJpeg extends Plugin {
 
 		// Get the name of the currently active file
 		const activeFile = this.app.workspace.getActiveFile();
-		const currentFileDirectory = activeFile ? activeFile.parent.path : "";
+		const currentFileDirectory = activeFile?.parent?.path ?? "";
+
 
 		// Determine the folder path
 		const folderPath = this.settings.imgPath
@@ -302,13 +354,16 @@ export default class pasteToJpeg extends Plugin {
 		// Generate a unique filename
 		const filename = `${folderPath}/${this.settings.imgPrefix}${originalName}-${formattedDateTime}-${rand}.${extension}`;
 		const parts = filename.split("/");
-		const basename = parts.pop();
+		const basename = parts.pop() || "";
 
 		const directoryPath = path.dirname(filename);
 		//console.log(`'want to create',${directoryPath}`);
 
-		if (!(await this.app.vault.exists(`${directoryPath}`))) {
-			await this.app.vault.createFolder(`${directoryPath}`);
+		// Check if directory exists, if not create it
+		const directoryExists =
+			await this.app.vault.adapter.exists(directoryPath);
+		if (!directoryExists) {
+			await this.app.vault.createFolder(directoryPath);
 		}
 
 		return [filename, basename];
@@ -326,7 +381,6 @@ export default class pasteToJpeg extends Plugin {
 		await this.saveData(this.settings);
 	}
 }
-
 
 class SampleSettingTab extends PluginSettingTab {
 	plugin: pasteToJpeg;
@@ -419,7 +473,7 @@ class SampleSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
-        new Setting(containerEl)
+		new Setting(containerEl)
 			.setName("Ask user every time")
 			.setDesc("Enable this to ask the parameters each time as a pop-up.")
 			.addToggle((toggle) =>
@@ -430,9 +484,11 @@ class SampleSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
-        new Setting(containerEl)
+		new Setting(containerEl)
 			.setName("Save parameters")
-			.setDesc("Enable this to save the values the user selects in the pop-up")
+			.setDesc(
+				"Enable this to save the values the user selects in the pop-up",
+			)
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.saveaskUser)
