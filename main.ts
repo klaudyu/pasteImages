@@ -344,9 +344,18 @@ export default class pasteToJpeg extends Plugin {
 
 
 		// Determine the folder path
-		const folderPath = this.settings.imgPath
-			? this.settings.imgPath
-			: currentFileDirectory;
+		let folderPath: string;
+		if (this.settings.imgPath) {
+			// If imgPath starts with ./ then it's relative to current file directory
+			if (this.settings.imgPath.startsWith('./')) {
+				folderPath = path.join(currentFileDirectory, this.settings.imgPath.substring(2));
+			} else {
+				// Otherwise treat as absolute path
+				folderPath = this.settings.imgPath;
+			}
+		} else {
+			folderPath = currentFileDirectory;
+		}
 
 		// Determine the filename with prefix
 		const originalName = activeFile ? activeFile.basename : "Image";
